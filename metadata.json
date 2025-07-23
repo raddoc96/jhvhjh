@@ -1,0 +1,8 @@
+{
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "name": "EXP RADDOC PRESENTATION  agent 5.0",
+  "description": "",
+  "prompt": ""
+}
