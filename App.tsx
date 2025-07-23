@@ -2,6 +2,8 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { AppStep, InitialAIResponse, EnhancedAIResponse, UserProvidedImage, AISuggestedImage, SearchResultItem, AvailableModel, InteractiveSlideRecord, UserProvidedVideo, AISuggestedVideo, InitialMarpAIResponse, EnhancedMarpAIResponse, WeightedPrompt, UserProvidedChart, UserProvidedTable, AISuggestedChart, AISuggestedTable, HierarchyNode, MediaRequest } from './types'; // Added chart/table types
 import { GeminiService } from './services/GeminiService';
+import { ApiKeyService } from './services/ApiKeyService';
+import { ApiKeyModal } from './components/ApiKeyModal';
 import { AgentService } from './services/agentService';
 import { LyraService, LyraConnectionStatus, LyraPlaybackStatus } from './services/lyraService';
 import FileUpload from './components/FileUpload';
@@ -99,6 +101,9 @@ export const App: React.FC = () => {
   const [phase1LoadingMessage, setPhase1LoadingMessage] = useState<string | null>(null);
   const [microphonePermissionStatus, setMicrophonePermissionStatus] = useState<'idle' | 'pending' | 'granted' | 'denied' | 'unavailable'>('idle');
   const [modelFallbackNotification, setModelFallbackNotification] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(true);
+  const [isApiKeyLoading, setIsApiKeyLoading] = useState<boolean>(false);
 
   // --- Agent State ---
   const [agentLog, setAgentLog] = useState<string[]>([]);
@@ -132,15 +137,39 @@ export const App: React.FC = () => {
   };
 
   const geminiService = useMemo(() => {
+    if (!apiKey) return null;
     try {
-      return new GeminiService(handleModelSwitchNotification);
+      return new GeminiService(apiKey, handleModelSwitchNotification);
     } catch (e) {
       console.error("Failed to instantiate GeminiService:", e);
       const errorMessage = `Critical: Failed to initialize AI Service. ${e instanceof Error ? e.message : String(e)}. Please ensure API_KEY is correctly set.`;
       setError(prevError => prevError ? `${prevError}\n${errorMessage}` : errorMessage);
       return null;
     }
+  }, [apiKey]);
+
+  useEffect(() => {
+    const storedApiKey = ApiKeyService.getApiKey();
+    if (storedApiKey) {
+      setApiKey(storedApiKey);
+      setIsApiKeyModalOpen(false);
+    }
   }, []);
+
+  const handleApiKeySubmit = async (newApiKey: string) => {
+    setIsApiKeyLoading(true);
+    try {
+      const tempService = new GeminiService(newApiKey, handleModelSwitchNotification);
+      await tempService.verifyApiKey();
+      ApiKeyService.setApiKey(newApiKey);
+      setApiKey(newApiKey);
+      setIsApiKeyModalOpen(false);
+    } catch (e) {
+      setError('Invalid API Key. Please check your key and try again.');
+    } finally {
+      setIsApiKeyLoading(false);
+    }
+  };
 
     const replaceImagePlaceholdersWithData = (htmlContent: string | null, images: UserProvidedImage[]): string => {
     if (!htmlContent) return '';
@@ -1404,6 +1433,10 @@ const handleContinueWithManualEnhancement = () => {
   };
 
   const renderContent = () => {
+    if (isApiKeyModalOpen) {
+      return <ApiKeyModal onApiKeySubmit={handleApiKeySubmit} isLoading={isApiKeyLoading} />;
+    }
+
     if (phase1LoadingMessage) { return <LoadingSpinner message={phase1LoadingMessage} />; }
     if (isLoading && interactiveSlideModalState === 'hidden') { return <LoadingSpinner message={getLoadingMessage()} />; }
 
